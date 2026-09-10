@@ -1,6 +1,8 @@
 # Secrets — never commit
 dev/
+dev/local-key.txt
 *.local.*
+*.key
 .env
 .env.*
 
