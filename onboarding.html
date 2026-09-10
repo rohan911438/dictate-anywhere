@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Welcome to Dictate Anywhere</title>
+    <link rel="stylesheet" href="onboarding.css" />
+  </head>
+  <body>
+    <main>
+      <h1>🎙️ Dictate Anywhere</h1>
+      <p class="lead">
+        Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> on any web page, speak,
+        and your words are typed into whatever field has focus. Tap to toggle, or hold and
+        release for push-to-talk.
+      </p>
+
+      <ol>
+        <li>
+          <h2>1 · Allow the microphone</h2>
+          <p>Grant access now so your first dictation doesn’t stall on a permission prompt.</p>
+          <button id="mic" class="primary" type="button">Allow microphone</button>
+          <span id="micState" class="state"></span>
+        </li>
+
+        <li>
+          <h2>2 · Add your AssemblyAI API key</h2>
+          <p>
+            Create one at
+            <a href="https://www.assemblyai.com/dashboard/api-keys" target="_blank" rel="noopener">
+              assemblyai.com/dashboard/api-keys</a>, then paste it into Options.
+          </p>
+          <button id="opts" type="button">Open Options</button>
+          <span id="keyState" class="state"></span>
+        </li>
+
+        <li>
+          <h2>3 · Change the hotkey (optional)</h2>
+          <p>Manage it at <code>chrome://extensions/shortcuts</code>.</p>
+          <button id="sc" type="button">Open shortcuts</button>
+        </li>
+      </ol>
+
+      <p class="tip">
+        For long-form dictation, turn on <strong>Auto silence-chunking</strong> in Options —
+        it sends a clip after each natural pause and keeps listening.
+      </p>
+    </main>
+    <script type="module" src="onboarding.js"></script>
+  </body>
+</html>

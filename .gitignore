@@ -1,0 +1,17 @@
+# Secrets — never commit
+dev/
+*.local.*
+.env
+.env.*
+
+# Test fixtures
+test-clips/
+*.wav
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Dictate Anywhere — audio capture</title>
+  </head>
+  <body>
+    <!-- Invisible. Exists only to hold a microphone MediaStream + AudioContext,
+         which a service worker cannot own itself. -->
+    <script type="module" src="offscreen.js"></script>
+  </body>
+</html>

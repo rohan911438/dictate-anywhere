@@ -1,0 +1,14 @@
+{
+  "name": "dictate-anywhere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome MV3 extension: hold a hotkey, speak anywhere, and the cleaned-up transcript is typed into the focused field. Powered by the AssemblyAI Dictation API.",
+  "type": "commonjs",
+  "scripts": {
+    "icons": "node tools/make-icons.js",
+    "test:api": "node test-api.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

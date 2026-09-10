@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Dictate Anywhere — Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Dictate Anywhere — Options</h1>
+
+      <section>
+        <h2>AssemblyAI API key</h2>
+        <p class="muted">
+          Stored only in this browser (<code>chrome.storage.local</code>). Never synced,
+          never sent anywhere except to AssemblyAI. Paste the raw key — no “Bearer” prefix.
+        </p>
+        <div class="key-row">
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false"
+                 placeholder="e.g. 0a1b2c3d…" />
+          <button id="toggleKey" type="button" class="ghost">Show</button>
+        </div>
+        <p class="muted small">
+          Create one at
+          <a href="https://www.assemblyai.com/dashboard/api-keys" target="_blank" rel="noopener">
+            assemblyai.com/dashboard/api-keys</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Languages</h2>
+        <p class="muted">Sent as <code>language_codes</code>. Tick every language you dictate in.</p>
+        <div id="langGrid" class="lang-grid"></div>
+      </section>
+
+      <section>
+        <h2>Default rewrite instruction</h2>
+        <p class="muted">
+          Plain-English instruction for the cleanup model (<code>llm_instruction</code>).
+          Leave blank to only strip filler words.
+        </p>
+        <textarea id="llm" rows="3" maxlength="2048"
+                  placeholder="e.g. Fix grammar and punctuation. Keep my wording."></textarea>
+        <div class="counter"><span id="llmCount">0</span> / 2048</div>
+      </section>
+
+      <section>
+        <h2>Key terms</h2>
+        <p class="muted">
+          Names / jargon to bias the transcript toward (<code>keyterms_prompt</code>). One per line.
+        </p>
+        <textarea id="keyterms" rows="3" placeholder="AssemblyAI&#10;Kubernetes&#10;Dr. Nakamura"></textarea>
+      </section>
+
+      <section>
+        <h2>Per-site rewrite overrides</h2>
+        <p class="muted">
+          Use a different instruction on specific domains. A <strong>blank</strong> instruction
+          means “insert exactly what I said” (no rewrite) on that site.
+        </p>
+        <div id="overrides" class="overrides"></div>
+        <button id="addOverride" type="button" class="ghost">+ Add site</button>
+      </section>
+
+      <section>
+        <h2>Behaviour</h2>
+        <label class="check">
+          <input type="checkbox" id="autoChunk" />
+          <span>
+            <strong>Auto silence-chunking</strong> — near-real-time mode. Sends a clip after
+            ~1.5&nbsp;s of silence and keeps listening until you press the hotkey again.
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="debug" />
+          <span><strong>Debug logging</strong> — verbose console output in every context.</span>
+        </label>
+      </section>
+
+      <div class="bar">
+        <button id="save" type="button" class="primary">Save</button>
+        <span id="saved" class="saved" hidden>Saved ✓</span>
+      </div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
