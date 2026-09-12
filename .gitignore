@@ -13,6 +13,9 @@ test-clips/
 # Node
 node_modules/
 
+# Build output
+dist/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "icons": "node tools/make-icons.js",
-    "test:api": "node test-api.js"
+    "test:api": "node test-api.js",
+    "package": "node tools/package-extension.js"
   },
   "engines": {
     "node": ">=18"
