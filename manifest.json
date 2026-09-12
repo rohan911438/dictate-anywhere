@@ -16,7 +16,8 @@
       "js": ["content-script.js"],
       "css": ["content-style.css"],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "options_ui": {

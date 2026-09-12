@@ -125,8 +125,32 @@
     }));
   }
 
+  // Google Docs renders the visible page on canvas; its focused element is a
+  // hidden node that only exists to capture raw keystrokes for IME. Writing
+  // into it via execCommand/Range (below) succeeds silently but never
+  // reaches the real document. It does, however, run its own real paste
+  // handler on that node — the same one Ctrl+V uses — so a synthetic
+  // ClipboardEvent is the one thing that actually lands.
+  function isGoogleDocsEditor() {
+    return /(^|\.)docs\.google\.com$/.test(location.hostname) && /\/document\//.test(location.pathname);
+  }
+
+  function dispatchPasteEvent(el, text) {
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text);
+      el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function insertIntoContentEditable(el, text) {
     el.focus();
+
+    if (isGoogleDocsEditor() && dispatchPasteEvent(el, text)) return;
+
     const selection = window.getSelection();
 
     let before = '';
