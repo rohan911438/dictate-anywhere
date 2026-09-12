@@ -100,7 +100,11 @@ Voice Access work. It's a bigger rebuild (different tech stack, no more
 `chrome.*` APIs), so only worth it once Phases 1-3 prove the product is
 worth using daily.
 
-## Immediate next step
-Implement Phase 1. It's a net deletion of code, not an addition — smaller
-and more reliable than what's in the repo today. Say the word and I'll do
-the rewrite now.
+## Status
+
+**Phase 1 is shipped** (commit `40b14d7`). `content-script.js` no longer
+touches page DOM at all — it copies to the clipboard and shows a "Copied —
+press Ctrl+V" pill. Confirmed working end-to-end.
+
+Phases 2-4 are optional future work, not required for the product to be
+useful today — see above for what each would add.
