@@ -1,12 +1,18 @@
 # Dictate Anywhere
 
 A Chrome (Manifest V3) extension. Press **Ctrl+Shift+Space** on any web page,
-speak, and the cleaned‑up transcript is typed into whatever field had focus —
-plain inputs, textareas, and React‑style `contenteditable` editors like Gmail
-compose or GitHub comments.
+speak, and the cleaned‑up transcript is copied to your clipboard — press
+**Ctrl+V** to paste it anywhere: a plain input, a React‑controlled field,
+Gmail compose, GitHub comments, Google Docs, a desktop app outside the
+browser entirely. Anything that accepts a paste.
 
-The transcript is consumed **once**, as keyboard input, then discarded. There is
-no history, no search, no dashboard — voice replaces typing.
+The extension deliberately does **not** try to write directly into the page's
+DOM. Every site's editor has its own quirks (see `ROADMAP.md` for the full
+reasoning) and chasing each one is an unbounded maintenance problem. The
+clipboard + native paste is the one interface every app already gets right.
+
+There is no history, no search, no dashboard — voice replaces typing, one
+clipboard write at a time.
 
 Powered by the **AssemblyAI Dictation API** (`POST https://dictation.assemblyai.com/transcribe`)
 — a single‑shot multipart REST call that returns a verbatim transcript plus an
@@ -45,18 +51,20 @@ Requires Chrome **116+**.
 | Toolbar popup → **Start / Stop dictation** | Same as the hotkey, for pages where the shortcut isn't delivered. |
 
 A small status pill (bottom‑right of the page) shows **Listening → Transcribing →
-Inserted**, or an error.
-
-The insertion target is the field that had focus **when you started speaking**,
-even if focus moved while you spoke. If nothing editable is focused, the pill
-says so and no API call is made.
+Copied (press Ctrl+V)**, or an error. Nothing needs to be focused for
+dictation to start — the transcript goes to the clipboard regardless, so you
+can even dictate a note with no page in mind and paste it later.
 
 ### Auto silence‑chunking (opt‑in, Options → Behaviour)
 
 Off by default. When on, a session doesn't wait for you to stop — after ~1.5 s of
-silence the current clip is sent, the transcript is inserted, and it **keeps
-listening**. Press the hotkey again to end the session. Each clip still respects
-the API's 120‑second cap (finalised at ~115 s). Good for long‑form dictation.
+silence the current clip is sent and transcribed, and it **keeps listening**.
+Each new chunk's text is appended to the running transcript and the *whole
+thing so far* is re‑copied to the clipboard, so pasting at any point gets you
+everything dictated up to that moment — no chunk is ever lost by being
+overwritten. Press the hotkey again to end the session. Each clip still
+respects the API's 120‑second cap (finalised at ~115 s). Good for long‑form
+dictation.
 
 ### Options
 
@@ -122,7 +130,7 @@ hotkey / popup ─▶ background.js (service worker, ES module)
                     │  hand-encodes WAV (44-byte header + PCM16)
                     ▼  base64 WAV ─▶ background ─▶ Dictation API
                  content-script.js (all frames)
-                    status pill  +  text injection
+                    status pill  +  clipboard write
 ```
 
 Deliberate decisions (do not "simplify" these away):
@@ -134,9 +142,13 @@ Deliberate decisions (do not "simplify" these away):
   `MediaRecorder` emits webm/opus; the Dictation API needs WAV/PCM. The capture
   graph routes `source → processor → zero‑gain → destination` so the node keeps
   firing without any mic audio reaching the speakers.
-- **Native prototype `value` setter** for `<input>`/`<textarea>` injection, so
-  React/Vue change detection fires. `execCommand('insertText')` with a Range
-  fallback for `contenteditable`.
+- **Clipboard, not DOM injection.** The content script never touches the
+  page's text — it writes the transcript via `navigator.clipboard.writeText`
+  and shows a "Copied — press Ctrl+V" pill. This is why the top frame (not
+  whichever frame happens to have focus) always owns the pill: there's no
+  target element to track anymore, just one place to show one confirmation.
+  See `ROADMAP.md` for why this replaced the earlier per‑site DOM‑insertion
+  approach.
 - **Transient state in `chrome.storage.session`**, not a variable — the worker
   can be suspended mid‑flow. If the worker is killed while recording, the next
   hotkey press reconciles: offscreen still alive ⇒ session recovers on stop;
@@ -162,18 +174,16 @@ Deliberate decisions (do not "simplify" these away):
 
 ## Known site issues
 
-Populate this section from manual testing (`content-script.js` injection):
+Because insertion is now clipboard + paste rather than direct DOM writes, the
+whole earlier category of "does this specific editor's `contenteditable`
+accept our text" bugs no longer applies — Google Forms, Gmail, GitHub, Google
+Docs, Notion, anything: if the site accepts a normal Ctrl+V paste, it works.
+What's left to watch for is much narrower:
 
-- **Plain form textarea (e.g. Google Forms)** — _status: to verify._ Native
-  setter path; expected to work.
-- **Gmail compose** — _status: to verify._ `contenteditable`,
-  `execCommand('insertText')` path. Watch for Gmail re‑wrapping the caret after
-  insert.
-- **GitHub issue / PR comment box** — _status: to verify._ Plain `<textarea>`
-  (the Markdown editor); native setter path.
-- Sites that bind `Ctrl+Shift+Space` themselves will conflict with push‑to‑talk.
-- Focus inside a cross‑origin `<iframe>` whose parent is the active tab: the pill
-  and insertion happen in that frame; a very small frame may clip the pill.
+- Sites that bind `Ctrl+Shift+Space` themselves may conflict with the hotkey
+  (change it at `chrome://extensions/shortcuts`).
+- `navigator.clipboard.writeText` can be blocked by site or browser policy on
+  rare pages — the pill shows "⚠ Could not copy to clipboard" if so.
 - After updating the extension, already‑open tabs keep running the old content
   script until reloaded.
 
@@ -186,7 +196,7 @@ Populate this section from manual testing (`content-script.js` injection):
 | `manifest.json` | MV3 manifest, `toggle-dictation` command, module worker |
 | `background.js` | state machine, offscreen lifecycle, AssemblyAI fetch |
 | `offscreen.html` / `offscreen.js` | mic capture + WAV encoding |
-| `content-script.js` / `content-style.css` | status pill + text injection |
+| `content-script.js` / `content-style.css` | status pill + clipboard write |
 | `popup.html` / `.js` / `.css` | toolbar status + start/stop + links |
 | `options.html` / `.js` / `.css` | key, languages, instructions, overrides, toggles |
 | `onboarding.html` / `.js` / `.css` | first‑run: mic grant + key + hotkey |

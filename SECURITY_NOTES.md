@@ -106,17 +106,20 @@ transcription layer, both, or gaps found?
 
 ### Extension‑side guarantees regardless of API behaviour
 
-- `llm_response` / `text` is inserted **only** as text, via the native `value`
-  setter (`<input>`/`<textarea>`) or `execCommand('insertText')` /
-  `Range` (`contenteditable`). It is never passed to `eval`, `Function`,
-  `innerHTML`, a URL, `postMessage`, storage that is later executed, or another
-  API call.
-- The content script that performs insertion has no host privileges beyond
-  writing into the focused editable element in its own frame.
-- If the rewrite is empty or fails, the extension inserts the verbatim `text`;
-  if that is also empty it shows "No speech detected" and inserts nothing.
-- Worst realistic outcome: unexpected text in the user's own input field, which
-  the user sees before they submit it.
+- `llm_response` / `text` is written **only** to the system clipboard via
+  `navigator.clipboard.writeText`, as plain text. It is never passed to
+  `eval`, `Function`, `innerHTML`, a URL, `postMessage`, storage that is later
+  executed, or another API call — and, per the [pivot](ROADMAP.md), it is no
+  longer written into the page's DOM at all, which also removes the earlier
+  per‑site insertion code (native setters, `execCommand`, `Range`) as an
+  attack surface entirely.
+- The content script has no host privileges beyond showing its own status
+  pill and calling the Clipboard API in its own frame.
+- If the rewrite is empty or fails, the extension copies the verbatim `text`;
+  if that is also empty it shows "No speech detected" and copies nothing.
+- Worst realistic outcome: unexpected text sitting on the user's clipboard,
+  which the user sees in the "Copied" pill and controls when (or whether) to
+  paste it anywhere.
 
 ---
 

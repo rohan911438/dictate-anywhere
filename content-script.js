@@ -1,8 +1,16 @@
 // Dictate Anywhere — content script.
 //
-// Runs in every frame of every http(s) page. Responsibilities:
-//   1. Show a floating status pill (listening / processing / done / error).
-//   2. Inject the finished transcript into whatever field had focus.
+// Deliberately small. It does NOT touch the page's DOM to insert text —
+// every site's editor (plain inputs, React-controlled fields, Gmail's
+// contenteditable, Google Docs' canvas-rendered fake-DOM, ...) has its own
+// quirks, and chasing each one individually is an unbounded maintenance
+// problem. Instead: the transcript goes on the system clipboard, the page
+// shows a "Copied — press Ctrl+V" pill, and the user pastes it themselves.
+// Ctrl+V already works correctly everywhere, with no per-site code at all.
+//
+// Responsibilities:
+//   1. Show a floating status pill (listening / processing / copied / error).
+//   2. Copy the finished transcript to the clipboard.
 //   3. Detect hotkey *release* so "hold to talk" works (chrome.commands only
 //      fires on key-down, so the service worker owns start; this owns release).
 //
@@ -27,36 +35,17 @@
   const log = (...a) => { if (DEBUG) console.log('[DictateAnywhere:cs]', ...a); };
 
   // session-local state
-  let armed = false; // this frame owns the active dictation session
+  // `sessionActive` is tracked in every frame so whichever frame actually has
+  // focus can detect the hotkey release. `armed` is top-frame-only: it owns
+  // the one visible pill and the clipboard write, so a page with iframes
+  // doesn't show a pill per frame.
+  let sessionActive = false;
+  let armed = false;
   let sessionStartedAt = 0;
   let stopSent = false;
-  let targetEl = null;
-  const pendingBySeq = new Map();
+  let accumulated = ''; // joined text across auto-chunk mode's multiple chunks
+  const pendingBySeq = new Map(); // out-of-order chunk results, applied in order
   let nextSeq = 0;
-
-  // ---------------------------------------------------------------- focus utils
-  function deepActiveElement(root = document) {
-    let el = root.activeElement;
-    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
-      el = el.shadowRoot.activeElement;
-    }
-    return el;
-  }
-
-  function isEditable(el) {
-    if (!el) return false;
-    if (el.tagName === 'TEXTAREA') return !el.disabled && !el.readOnly;
-    if (el.tagName === 'INPUT') {
-      const type = (el.getAttribute('type') || 'text').toLowerCase();
-      const editableTypes = ['text', 'search', 'url', 'tel', 'email', 'password', 'number', ''];
-      return editableTypes.includes(type) && !el.disabled && !el.readOnly;
-    }
-    return el.isContentEditable === true;
-  }
-
-  function frameOwnsFocus() {
-    return document.hasFocus() && isEditable(deepActiveElement());
-  }
 
   // ---------------------------------------------------------------- status pill
   let pillEl = null;
@@ -74,8 +63,8 @@
     pillEl.dataset.state = state;
     pillEl.textContent = text;
     pillEl.style.display = 'flex';
-    if (state === 'done' || state === 'error' || state === 'idle') {
-      const ms = state === 'error' ? 4500 : 1500;
+    if (state === 'copied' || state === 'error' || state === 'idle') {
+      const ms = state === 'error' ? 4500 : state === 'copied' ? 2600 : 1200;
       pillHideTimer = setTimeout(hidePill, ms);
     }
   }
@@ -83,14 +72,7 @@
     if (pillEl) pillEl.style.display = 'none';
   }
 
-  // ---------------------------------------------------------------- insertion
-  function resolveTarget() {
-    if (targetEl && targetEl.isConnected && isEditable(targetEl)) return targetEl;
-    const active = deepActiveElement();
-    return isEditable(active) ? active : null;
-  }
-
-  // Add a leading space when joining onto existing text mid-sentence.
+  // Add a leading space when joining onto previously accumulated text.
   function needsLeadingSpace(before, text) {
     if (!before) return false;
     if (/\s$/.test(before)) return false;
@@ -98,117 +80,30 @@
     return true;
   }
 
-  function insertIntoInput(el, text) {
-    el.focus();
-    const hasSelection = typeof el.selectionStart === 'number';
-    const start = hasSelection ? el.selectionStart : el.value.length;
-    const end = hasSelection ? el.selectionEnd : el.value.length;
-    const before = el.value.slice(0, start);
-    const payload = (needsLeadingSpace(before, text) ? ' ' : '') + text;
-
-    // Native prototype setter so React / Vue change detection actually fires.
-    const proto = el.tagName === 'TEXTAREA'
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-    setter.call(el, before + payload + el.value.slice(end));
-
-    if (hasSelection) {
-      const caret = start + payload.length;
-      try { el.setSelectionRange(caret, caret); } catch (_) { /* number inputs */ }
-    }
-    el.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      cancelable: false,
-      inputType: 'insertText',
-      data: payload,
-    }));
-  }
-
-  // Google Docs renders the visible page on canvas; its focused element is a
-  // hidden node that only exists to capture raw keystrokes for IME. Writing
-  // into it via execCommand/Range (below) succeeds silently but never
-  // reaches the real document. It does, however, run its own real paste
-  // handler on that node — the same one Ctrl+V uses — so a synthetic
-  // ClipboardEvent is the one thing that actually lands.
-  function isGoogleDocsEditor() {
-    return /(^|\.)docs\.google\.com$/.test(location.hostname) && /\/document\//.test(location.pathname);
-  }
-
-  function dispatchPasteEvent(el, text) {
+  async function copyToClipboard(text) {
     try {
-      const dt = new DataTransfer();
-      dt.setData('text/plain', text);
-      el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+      await navigator.clipboard.writeText(text);
       return true;
-    } catch (_) {
+    } catch (e) {
+      log('clipboard write failed', e);
       return false;
     }
   }
 
-  function insertIntoContentEditable(el, text) {
-    el.focus();
-
-    if (isGoogleDocsEditor() && dispatchPasteEvent(el, text)) return;
-
-    const selection = window.getSelection();
-
-    let before = '';
-    if (selection && selection.rangeCount) {
-      const probe = selection.getRangeAt(0).cloneRange();
-      probe.collapse(true);
-      try {
-        probe.setStart(el, 0);
-        before = probe.toString();
-      } catch (_) { /* cross-boundary selection — skip the space heuristic */ }
-    }
-    const payload = (needsLeadingSpace(before, text) ? ' ' : '') + text;
-
-    let handled = false;
-    try {
-      handled = document.execCommand('insertText', false, payload);
-    } catch (_) {
-      handled = false;
-    }
-    if (handled) return;
-
-    // Range fallback for editors that reject execCommand.
-    if (selection && selection.rangeCount) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      const node = document.createTextNode(payload);
-      range.insertNode(node);
-      range.setStartAfter(node);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
+  // Appends one chunk's text to the running transcript and re-copies the
+  // whole thing, so auto-chunk mode never loses an earlier chunk by
+  // overwriting the clipboard out from under it — whenever the user pastes,
+  // they get everything dictated so far in this session.
+  async function appendAndCopy(text) {
+    const payload = (needsLeadingSpace(accumulated, text) ? ' ' : '') + text;
+    accumulated += payload;
+    const ok = await copyToClipboard(accumulated);
+    if (ok) {
+      showPill('copied', `✓ Copied (${accumulated.length} chars) — press Ctrl+V`);
+      // auto-chunk mode: fall back to the listening pill after the flash
+      setTimeout(() => { if (armed && sessionActive) showPill('listening', '● Listening…'); }, 1400);
     } else {
-      el.appendChild(document.createTextNode(payload));
-    }
-    el.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      inputType: 'insertText',
-      data: payload,
-    }));
-  }
-
-  function insertText(text) {
-    const el = resolveTarget();
-    if (!el) {
-      showPill('error', '⚠ No text field focused');
-      return;
-    }
-    try {
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') insertIntoInput(el, text);
-      else insertIntoContentEditable(el, text);
-      showPill('done', '✓ Inserted');
-      if (armed) {
-        // auto-chunk mode: fall back to the listening pill after the flash
-        setTimeout(() => { if (armed) showPill('listening', '● Listening…'); }, 900);
-      }
-    } catch (e) {
-      log('insert failed', e);
-      showPill('error', '⚠ Could not insert text');
+      showPill('error', '⚠ Could not copy to clipboard');
     }
   }
 
@@ -217,7 +112,7 @@
       const text = pendingBySeq.get(nextSeq);
       pendingBySeq.delete(nextSeq);
       nextSeq += 1;
-      if (text && text.trim()) insertText(text);
+      if (text && text.trim()) appendAndCopy(text);
     }
   }
 
@@ -227,20 +122,17 @@
 
     switch (msg.type) {
       case 'dictation-listening': {
-        const owns = frameOwnsFocus();
-        if (owns) {
+        sessionActive = true;
+        stopSent = false;
+        sessionStartedAt = Date.now();
+        if (isTopFrame) {
           armed = true;
-          stopSent = false;
-          sessionStartedAt = Date.now();
+          accumulated = '';
           pendingBySeq.clear();
           nextSeq = 0;
-          targetEl = deepActiveElement();
           showPill('listening', '● Listening…');
-          log('armed — target', targetEl && targetEl.tagName);
-        } else if (isTopFrame && !(document.activeElement instanceof HTMLIFrameElement)) {
-          // No editable focus anywhere and the focus is not inside a subframe.
-          showPill('error', '⚠ Focus a text field first');
         }
+        log('listening');
         break;
       }
 
@@ -250,27 +142,33 @@
         break;
 
       case 'dictation-insert':
-        if (!armed) break;
+        if (!armed) break; // only the top frame owns the pill/clipboard
         if (typeof msg.seq === 'number') {
           pendingBySeq.set(msg.seq, msg.text || '');
           flushPending();
-        } else {
-          insertText(msg.text || '');
+        } else if (msg.text) {
+          appendAndCopy(msg.text);
         }
         break;
 
       case 'dictation-done':
-        if (armed) showPill('done', '✓ Done');
+        sessionActive = false;
+        if (armed) {
+          if (accumulated) showPill('copied', `✓ Copied (${accumulated.length} chars) — press Ctrl+V`);
+          else hidePill();
+        }
         armed = false;
         break;
 
       case 'dictation-idle':
+        sessionActive = false;
         if (armed) hidePill();
         armed = false;
         break;
 
       case 'dictation-error':
-        if (armed || isTopFrame) showPill('error', `⚠ ${msg.message || 'Dictation failed'}`);
+        sessionActive = false;
+        if (isTopFrame) showPill('error', `⚠ ${msg.message || 'Dictation failed'}`);
         armed = false;
         break;
 
@@ -280,7 +178,7 @@
 
   // -------------------------------------------------- hotkey release (hold-to-talk)
   function onKeyUp(e) {
-    if (!armed || stopSent) return;
+    if (!sessionActive || stopSent) return;
     const releaseKey =
       e.code === 'Space' ||
       e.key === ' ' ||
@@ -294,11 +192,4 @@
     chrome.runtime.sendMessage({ type: 'cs-stop' }).catch(() => {});
   }
   window.addEventListener('keyup', onKeyUp, true);
-
-  // Keep the injection target fresh while idle.
-  document.addEventListener('focusin', () => {
-    if (armed) return;
-    const active = deepActiveElement();
-    if (isEditable(active)) targetEl = active;
-  }, true);
 })();

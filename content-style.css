@@ -11,29 +11,36 @@
   gap: 8px !important;
   max-width: 340px !important;
   margin: 0 !important;
-  padding: 8px 14px !important;
+  padding: 9px 16px !important;
   border: 0 !important;
   border-radius: 999px !important;
   font: 500 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
   letter-spacing: 0.01em !important;
   color: #fff !important;
   background: #1f2937 !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
   pointer-events: none !important;
   user-select: none !important;
   -webkit-user-select: none !important;
   text-transform: none !important;
   opacity: 1 !important;
-  transition: none !important;
+  animation: dictate-anywhere-in 0.16s ease-out !important;
+  transition: background-color 0.18s ease !important;
+}
+
+@keyframes dictate-anywhere-in {
+  from { opacity: 0 !important; transform: translateY(6px) scale(0.98) !important; }
+  to { opacity: 1 !important; transform: translateY(0) scale(1) !important; }
 }
 
 #dictate-anywhere-pill[data-state="listening"] { background: #dc2626 !important; }
 #dictate-anywhere-pill[data-state="processing"] { background: #2563eb !important; }
-#dictate-anywhere-pill[data-state="done"] { background: #16a34a !important; }
+#dictate-anywhere-pill[data-state="copied"] { background: #16a34a !important; }
 #dictate-anywhere-pill[data-state="error"] { background: #b45309 !important; }
 
 #dictate-anywhere-pill[data-state="listening"]::before {
   content: "" !important;
+  flex: none !important;
   width: 8px !important;
   height: 8px !important;
   border-radius: 50% !important;
@@ -41,7 +48,41 @@
   animation: dictate-anywhere-pulse 1s ease-in-out infinite !important;
 }
 
+#dictate-anywhere-pill[data-state="processing"]::before {
+  content: "" !important;
+  flex: none !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, 0.35) !important;
+  border-top-color: #fff !important;
+  animation: dictate-anywhere-spin 0.7s linear infinite !important;
+}
+
+#dictate-anywhere-pill[data-state="copied"] {
+  animation: dictate-anywhere-in 0.16s ease-out, dictate-anywhere-pop 0.22s ease-out !important;
+}
+
 @keyframes dictate-anywhere-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+@keyframes dictate-anywhere-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dictate-anywhere-pop {
+  0% { transform: scale(0.94); }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #dictate-anywhere-pill,
+  #dictate-anywhere-pill[data-state="copied"],
+  #dictate-anywhere-pill[data-state="listening"]::before,
+  #dictate-anywhere-pill[data-state="processing"]::before {
+    animation: none !important;
+  }
 }

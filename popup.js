@@ -39,7 +39,7 @@ async function refresh() {
   } else if (restricted) {
     $('hint').textContent = 'This browser page can’t receive dictation — try a normal website.';
   } else {
-    $('hint').textContent = 'Hotkey: Ctrl+Shift+Space — tap to toggle, or hold and release.';
+    $('hint').textContent = 'Hotkey: Ctrl+Shift+Space — speak, then Ctrl+V to paste the result anywhere.';
   }
 }
 

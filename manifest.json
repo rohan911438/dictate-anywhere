@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "Dictate Anywhere",
   "version": "0.1.0",
-  "description": "Hold Ctrl+Shift+Space on any web page, speak, and your words are typed into the focused field. Powered by AssemblyAI.",
+  "description": "Press Ctrl+Shift+Space on any web page, speak, and the cleaned-up transcript is copied to your clipboard — paste it anywhere. Powered by AssemblyAI.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "activeTab", "scripting", "offscreen"],
+  "permissions": ["storage", "activeTab", "scripting", "offscreen", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
@@ -16,8 +16,7 @@
       "js": ["content-script.js"],
       "css": ["content-style.css"],
       "run_at": "document_idle",
-      "all_frames": true,
-      "match_about_blank": true
+      "all_frames": true
     }
   ],
   "options_ui": {
