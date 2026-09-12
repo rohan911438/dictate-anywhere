@@ -191,7 +191,20 @@ async function stopDictation() {
   }
 
   if (st.tabId != null) sendToTab(st.tabId, { type: 'dictation-processing' });
-  await tellOffscreenReliably({ type: 'stop' }); // offscreen replies with 'final' or 'stopped'
+  const acked = await tellOffscreenReliably({ type: 'stop' }); // offscreen replies with 'final' or 'stopped'
+  if (!acked) {
+    // Offscreen never acknowledged the stop — treat the session as dead instead
+    // of leaving the page stuck on "Transcribing" forever.
+    await log('stop not acknowledged — forcing reset');
+    await clearRecording();
+    await closeOffscreen();
+    if (st.tabId != null) {
+      sendToTab(st.tabId, {
+        type: 'dictation-error',
+        message: 'Dictation got stuck and was reset — try again.',
+      });
+    }
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -364,7 +377,20 @@ let offscreenChain = Promise.resolve();
 function handleOffscreenMessage(msg) {
   offscreenChain = offscreenChain
     .then(() => processOffscreenMessage(msg))
-    .catch((e) => log('offscreen message handler failed', e));
+    .catch(async (e) => {
+      // An unexpected throw here must not leave the session stuck: the page
+      // is already showing "Transcribing" and has no other way to recover.
+      await log('offscreen message handler failed', e);
+      const st = await getState();
+      await clearRecording();
+      await closeOffscreen();
+      if (st.tabId != null) {
+        sendToTab(st.tabId, {
+          type: 'dictation-error',
+          message: 'Dictation failed unexpectedly — try again.',
+        });
+      }
+    });
   return offscreenChain;
 }
 

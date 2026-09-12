@@ -150,26 +150,35 @@ function onAudioProcess(event) {
 }
 
 // kind: 'chunk' (keep recording) | 'final' (session ending)
+// Must always reply — the background service worker waits on a 'chunk' /
+// 'final' / 'stopped' message with no other way to notice this failed, so an
+// uncaught throw here would leave the page stuck on "Transcribing" forever.
 function finalize(kind) {
-  const samples = flatten(frames, bufferedSamples);
-  const hadVoice = sawVoice;
-  const durationMs = Math.round((samples.length / sampleRate) * 1000);
-  resetClip();
+  try {
+    const samples = flatten(frames, bufferedSamples);
+    const hadVoice = sawVoice;
+    const durationMs = Math.round((samples.length / sampleRate) * 1000);
+    resetClip();
 
-  if (!hadVoice || durationMs < MIN_CHUNK_MS) {
-    log(`skipping ${kind}: hadVoice=${hadVoice} durationMs=${durationMs}`);
-    if (kind === 'final') reply({ type: 'stopped' });
-    return;
+    if (!hadVoice || durationMs < MIN_CHUNK_MS) {
+      log(`skipping ${kind}: hadVoice=${hadVoice} durationMs=${durationMs}`);
+      if (kind === 'final') reply({ type: 'stopped' });
+      return;
+    }
+
+    const wav = encodeWav(samples, sampleRate);
+    const audioBase64 = arrayBufferToBase64(wav);
+    const thisSeq = seq;
+    seq += 1;
+    log(
+      `${kind} seq=${thisSeq} samples=${samples.length} durationMs=${durationMs} bytes=${wav.byteLength}`,
+    );
+    reply({ type: kind, seq: thisSeq, audioBase64, durationMs, bytes: wav.byteLength });
+  } catch (e) {
+    log('finalize failed', e);
+    resetClip();
+    reply({ type: 'capture-error', message: 'Could not process the recording — try again.' });
   }
-
-  const wav = encodeWav(samples, sampleRate);
-  const audioBase64 = arrayBufferToBase64(wav);
-  const thisSeq = seq;
-  seq += 1;
-  log(
-    `${kind} seq=${thisSeq} samples=${samples.length} durationMs=${durationMs} bytes=${wav.byteLength}`,
-  );
-  reply({ type: kind, seq: thisSeq, audioBase64, durationMs, bytes: wav.byteLength });
 }
 
 function stop() {
